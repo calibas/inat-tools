@@ -96,7 +96,7 @@ def fetch_observations(
             params["term_value_id"] = annotation_value_id
 
         print(f"Fetching page {page}...")
-        response = api_get_request(f"{BASE_URL}/observations", params, 30)
+        response = api_get_request(f"{BASE_URL}/observations", params, 300)
 
         if response.status_code == 200:
             data = response.json()
@@ -198,57 +198,66 @@ def analyze_annotations(observations: Any) -> dict:
     Analyze annotations across all observations
     """
     annotation_stats = {}
-    observations_with_annotations = 0
+    observations_with_annotations = []
 
     term_labels = {
         "1": "Life Stage",
         "9": "Sex",
         "12": "Plant Phenology",
         "17": "Alive or Dead",
-        "22": "Evidence of Presence"
+        "22": "Evidence of Presence",
+        "36": "Leaves"
     }
 
     # TODO: Double-check these, copied from
     # https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-2-of-2/18792
+    # This list has the same values:
+    # https://github.com/pyinat/pyinaturalist/blob/36b23a688ccfade3a6f438f9ecb3ab770ec9351a/test/sample_data/get_controlled_terms.json#L45
     value_labels = {
         "2": "Adult",
         "3": "Teneral", 
-        "4":"Pupa", 
-        "5":"Nymph", 
-        "6":"Larva", 
-        "7":"Egg", 
-        "8":"Juvenile", 
-        "16":"Subimago",
+        "4": "Pupa", 
+        "5": "Nymph", 
+        "6": "Larva", 
+        "7": "Egg", 
+        "8": "Juvenile", 
+        "16": "Subimago",
 
         "10": "Female",
         "11": "Male",
+        # "20":"Cannot Be Determined",
 
         "13": "Flowering",
-        "14": "Fruiting",
-        "15": "Flower Budding",
-        "21": "No Evidence of Flowering",
+        "14": "Fruits or Seeds",
+        "15": "Flower Buds",
+        "21": "No Flowers or Fruits",
 
-        "18":"Alive", 
-        "19":"Dead",
-        "20":"Cannot Be Determined",
+        "18": "Alive", 
+        "19": "Dead",
+        "20": "Cannot Be Determined",
 
-        "23":"Feather", 
-        "24":"Organism", 
-        "25":"Scat", 
-        "26":"Track", 
-        "27":"Bone", 
-        "28":"Molt", 
-        "29":"Gall", 
-        "30":"Egg", 
+        "23": "Feather", 
+        "24": "Organism", 
+        "25": "Scat", 
+        "26": "Track", 
+        "27": "Bone", 
+        "28": "Molt", 
+        "29": "Gall", 
+        "30": "Egg", 
         "31": "Hair", 
-        "32":"Leafmine", 
-        "35":"Construction"
+        "32": "Leafmine", 
+        "35": "Construction",
+
+        "37": "Breaking Leaf Buds",
+        "38": "Green Leaves",
+        "39": "Colored Leaves",
+        "40": "No Live Leaves"
     }
 
     for obs in observations:
         annotations = obs.get('annotations', [])
         if annotations:
-            observations_with_annotations += 1
+            observations_with_annotations.append(obs)
 
         for annotation in annotations:
             controlled_term: int = annotation.get('controlled_attribute_id', {})
@@ -268,9 +277,31 @@ def analyze_annotations(observations: Any) -> dict:
     return {
         'total_observations': len(observations),
         'observations_with_annotations': observations_with_annotations,
-        'annotation_percentage': (observations_with_annotations / len(observations) * 100) if observations else 0,
+        'annotation_percentage': (len(observations_with_annotations) / len(observations) * 100) if observations else 0,
         'annotation_breakdown': annotation_stats
     }
+
+def get_location_data(observation: Any):
+    """
+    Get info about the observation's location
+    """
+
+    print(f"uri: {observation['uri']}")
+    # Check geoprivacy to see if location is obscured:
+    print(f"geoprivacy: {observation['geoprivacy']}")
+    print(f"taxon_geoprivacy: {observation['taxon_geoprivacy']}")
+    # true/false tag set by user:
+    print(f"obscured: {observation['obscured']}")
+    # positional_accuracy, null if obscured
+    print(f"positional_accuracy: {observation['positional_accuracy']}")
+    # public_positional_accuracy, null or very high if obscured
+    print(f"public_positional_accuracy: {observation['public_positional_accuracy']}")
+    print(f"geojson: {observation['geojson']}")
+    print(f"{observation['geojson']['coordinates']}")
+    # print(f"location_is_exact: {observation['location_is_exact']}")
+    
+    # Find elevation - USGS (US locations only?)
+    # https://epqs.nationalmap.gov/v1/json?x=-123.2228195295394&y=41.97714644545383&units=Feet&output=json
 
 def api_get_request(url: str, params: object, custom_duration: int = -1) -> Any:
     """
@@ -295,6 +326,29 @@ def api_get_request(url: str, params: object, custom_duration: int = -1) -> Any:
         time.sleep(1)  # Rate limiting - 1 request per second
     return response
 
+def elevation_get_request(lat: float, long: float) -> Any:
+    """
+    Handle epqs.nationalmap.gov API GET requests
+    """
+    session = CachedSession(
+        cache_name=str(CACHE_DIR / 'elevation_api_cache'),
+        backend='sqlite',  # Uses SQLite for storage
+        expire_after=CACHE_DURATION,
+        allowable_codes=[200],  # Only cache successful responses
+        allowable_methods=['GET'],  # Only cache GET requests
+        match_headers=False,  # Don't match on headers
+        ignored_parameters=['_']  # Ignore cache-busting parameters
+    )
+    response = session.get("https://epqs.nationalmap.gov/v1/json?x=-123.2228195295394&y=41.97714644545383&units=Feet&output=json", timeout=10)
+    if DEBUG_MODE:
+        print(session.options)
+        print(response.json())
+    # if hasattr(response, 'from_cache') and response.from_cache:
+    #     print(f"  Using cache ({url})")
+    # else:
+    #     time.sleep(1)  # Rate limiting - 1 request per second
+    return response
+
 def main() -> None:
     """
     Main function to execute the query
@@ -303,7 +357,7 @@ def main() -> None:
     print("=" * 50)
 
     # Configuration
-    species_name = "Amelanchier alnifolia"
+    species_name = "Ganoderma"
     place_name = "Siskiyou County, CA"
 
     session = CachedSession(
@@ -314,7 +368,8 @@ def main() -> None:
     if CLEAR_CACHE:
         session.cache.clear()
     else:
-        session.cache.remove_expired_responses()
+        # session.cache.remove_expired_responses()
+        session.cache.delete(expired=True)
 
     # Get IDs
     print(f"\nSearching for species: {species_name}")
@@ -356,7 +411,7 @@ def main() -> None:
         # Print summary
         print("\nSummary:")
         print(f"Total observations retrieved: {len(observations)}")
-        print(f"Observations with annotations: {annotation_analysis['observations_with_annotations']} ({annotation_analysis['annotation_percentage']:.1f}%)")
+        print(f"Observations with annotations: {len(annotation_analysis['observations_with_annotations'])} ({annotation_analysis['annotation_percentage']:.1f}%)")
         print(f"Date range: {observations[-1].get('observed_on')} to {observations[0].get('observed_on')}")
 
         # Quality grade breakdown
@@ -364,6 +419,7 @@ def main() -> None:
         for obs in observations:
             grade = obs.get('quality_grade', 'unknown')
             quality_grades[grade] = quality_grades.get(grade, 0) + 1
+            get_location_data(obs)
 
         print("\nQuality grades:")
         for grade, count in quality_grades.items():
@@ -375,6 +431,8 @@ def main() -> None:
             print(f"  {term}:")
             for value, count in values.items():
                 print(f"    {value}: {count}")
+        # for obs in annotation_analysis['observations_with_annotations']:
+        #     get_location_data(obs)
     else:
         print("\nNo observations found matching the criteria.")
 
