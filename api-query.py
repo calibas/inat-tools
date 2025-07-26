@@ -84,8 +84,8 @@ def get_annotation_values() -> Any:
 def fetch_observations(
     taxon_id: int,
     place_id: int,
-    annotation_term_id: int,
-    annotation_value_id: int):
+    annotation_term_id: (int | None) = None,
+    annotation_value_id: (int | None) = None):
     """
     Fetch observations with specified parameters
     """
@@ -97,13 +97,17 @@ def fetch_observations(
         params = {
             "taxon_id": taxon_id,
             "place_id": place_id,
-            "term_id": annotation_term_id,
-            "term_value_id": annotation_value_id,
             "per_page": PER_PAGE,
             "page": page,
             "order_by": "observed_on",
             "order": "desc"
         }
+        
+        # Add annotation filters only if provided
+        if annotation_term_id is not None:
+            params["term_id"] = annotation_term_id
+        if annotation_value_id is not None:
+            params["term_value_id"] = annotation_value_id
 
         print(f"Fetching page {page}...")
         # response = requests.get(f"{BASE_URL}/observations", params=params, timeout=10)
@@ -204,6 +208,40 @@ def save_to_json(observations: Any, filename: str):
 
     print(f"Saved raw data to {filename}")
 
+def analyze_annotations(observations: Any) -> dict:
+    """
+    Analyze annotations across all observations
+    """
+    annotation_stats = {}
+    observations_with_annotations = 0
+    
+    for obs in observations:
+        annotations = obs.get('annotations', [])
+        if annotations:
+            observations_with_annotations += 1
+            
+        for annotation in annotations:
+            controlled_term = annotation.get('controlled_attribute', {})
+            controlled_value = annotation.get('controlled_value', {})
+            
+            term_label = controlled_term.get('label', 'Unknown Term')
+            value_label = controlled_value.get('label', 'Unknown Value')
+            
+            if term_label not in annotation_stats:
+                annotation_stats[term_label] = {}
+            
+            if value_label not in annotation_stats[term_label]:
+                annotation_stats[term_label][value_label] = 0
+            
+            annotation_stats[term_label][value_label] += 1
+    
+    return {
+        'total_observations': len(observations),
+        'observations_with_annotations': observations_with_annotations,
+        'annotation_percentage': (observations_with_annotations / len(observations) * 100) if observations else 0,
+        'annotation_breakdown': annotation_stats
+    }
+
 def api_get_request(url: str, params: object) -> Any:
     """
     Handle iNat API GET requests
@@ -240,20 +278,22 @@ def main() -> None:
     print("\nSetting up annotation filter for 'Fruits or Seeds'")
     annotation_ids = get_annotation_values()
 
-    # Fetch observations
-    print("\nFetching observations...")
+    # Fetch all observations (without annotation filtering)
+    print("\nFetching all observations...")
     observations = fetch_observations(
         taxon_id=taxon_id,
-        place_id=place_id,
-        annotation_term_id=annotation_ids["term_id"],
-        annotation_value_id=annotation_ids["term_value_id"]
+        place_id=place_id
     )
 
     if observations:
+        # Analyze annotations
+        print("\nAnalyzing annotations...")
+        annotation_analysis = analyze_annotations(observations)
+        
         # Generate filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_filename = f"results/amelanchier_alnifolia_fruits_{timestamp}.csv"
-        json_filename = f"results/amelanchier_alnifolia_fruits_{timestamp}.json"
+        csv_filename = f"results/amelanchier_alnifolia_all_{timestamp}.csv"
+        json_filename = f"results/amelanchier_alnifolia_all_{timestamp}.json"
 
         # Save data
         save_to_csv(observations, csv_filename)
@@ -262,6 +302,7 @@ def main() -> None:
         # Print summary
         print("\nSummary:")
         print(f"Total observations retrieved: {len(observations)}")
+        print(f"Observations with annotations: {annotation_analysis['observations_with_annotations']} ({annotation_analysis['annotation_percentage']:.1f}%)")
         print(f"Date range: {observations[-1].get('observed_on')} to {observations[0].get('observed_on')}")
 
         # Quality grade breakdown
@@ -273,6 +314,13 @@ def main() -> None:
         print("\nQuality grades:")
         for grade, count in quality_grades.items():
             print(f"  {grade}: {count}")
+            
+        # Annotation breakdown
+        print("\nAnnotation breakdown:")
+        for term, values in annotation_analysis['annotation_breakdown'].items():
+            print(f"  {term}:")
+            for value, count in values.items():
+                print(f"    {value}: {count}")
     else:
         print("\nNo observations found matching the criteria.")
 
