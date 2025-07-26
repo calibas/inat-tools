@@ -21,7 +21,7 @@ PER_PAGE = 200  # Maximum allowed per page
 DEBUG_MODE = False
 CACHE_DIR = Path("./inat_cache")
 CACHE_DURATION = 86400  # 24 hours in seconds
-CLEAR_CACHE = False # Delete entire cache
+CLEAR_CACHE = False # Delete entire cache on start
 
 def get_place_id(place_name: str) -> (int | None):
     """
@@ -34,8 +34,6 @@ def get_place_id(place_name: str) -> (int | None):
     }
 
     response = api_get_request(url, params)
-    if DEBUG_MODE:
-        print(response.json())
     if response.status_code == 200:
         data = response.json()
         for place in data.get('results', []):
@@ -68,21 +66,6 @@ def get_taxon_id(species_name: str) -> (int | None):
                 return taxon['id']
     return None
 
-def get_annotation_values() -> Any:
-    """
-    Get annotation term and value IDs for "Flowers and Fruits: Fruits or Seeds"
-    Common annotation IDs (these are typically stable):
-    - Plant Phenology (term_id: 12)
-      - Flowering (value_id: 13)
-      - Fruiting (value_id: 14)
-      - Flower Budding (value_id: 15)
-      - No Evidence of Flowering (value_id: 16)
-    """
-    # For "Fruits or Seeds", we use Plant Phenology term with Fruiting value
-    return {
-        "term_id": 12,  # Plant Phenology
-        "term_value_id": 14  # Fruiting
-    }
 
 def fetch_observations(
     taxon_id: int,
@@ -105,7 +88,7 @@ def fetch_observations(
             "order_by": "observed_on",
             "order": "desc"
         }
-        
+
         # Add annotation filters only if provided
         if annotation_term_id is not None:
             params["term_id"] = annotation_term_id
@@ -216,27 +199,72 @@ def analyze_annotations(observations: Any) -> dict:
     """
     annotation_stats = {}
     observations_with_annotations = 0
-    
+
+    term_labels = {
+        "1": "Life Stage",
+        "9": "Sex",
+        "12": "Plant Phenology",
+        "17": "Alive or Dead",
+        "22": "Evidence of Presence"
+    }
+
+    # TODO: Double-check these, copied from
+    # https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-2-of-2/18792
+    value_labels = {
+        "2": "Adult",
+        "3": "Teneral", 
+        "4":"Pupa", 
+        "5":"Nymph", 
+        "6":"Larva", 
+        "7":"Egg", 
+        "8":"Juvenile", 
+        "16":"Subimago",
+
+        "10": "Female",
+        "11": "Male",
+
+        "13": "Flowering",
+        "14": "Fruiting",
+        "15": "Flower Budding",
+        "21": "No Evidence of Flowering",
+
+        "18":"Alive", 
+        "19":"Dead",
+        "20":"Cannot Be Determined",
+
+        "23":"Feather", 
+        "24":"Organism", 
+        "25":"Scat", 
+        "26":"Track", 
+        "27":"Bone", 
+        "28":"Molt", 
+        "29":"Gall", 
+        "30":"Egg", 
+        "31": "Hair", 
+        "32":"Leafmine", 
+        "35":"Construction"
+    }
+
     for obs in observations:
         annotations = obs.get('annotations', [])
         if annotations:
             observations_with_annotations += 1
-            
+
         for annotation in annotations:
-            controlled_term = annotation.get('controlled_attribute', {})
-            controlled_value = annotation.get('controlled_value', {})
-            
-            term_label = controlled_term.get('label', 'Unknown Term')
-            value_label = controlled_value.get('label', 'Unknown Value')
-            
+            controlled_term: int = annotation.get('controlled_attribute_id', {})
+            controlled_value: int = annotation.get('controlled_value_id', {})
+
+            term_label = term_labels[str(controlled_term)]
+            value_label = value_labels[str(controlled_value)]
+
             if term_label not in annotation_stats:
                 annotation_stats[term_label] = {}
-            
+
             if value_label not in annotation_stats[term_label]:
                 annotation_stats[term_label][value_label] = 0
-            
+
             annotation_stats[term_label][value_label] += 1
-    
+
     return {
         'total_observations': len(observations),
         'observations_with_annotations': observations_with_annotations,
@@ -256,11 +284,11 @@ def api_get_request(url: str, params: object, custom_duration: int = -1) -> Any:
         allowable_methods=['GET'],  # Only cache GET requests
         match_headers=False,  # Don't match on headers
         ignored_parameters=['_']  # Ignore cache-busting parameters
-    )     
+    )
     response = session.get(url, params=params, timeout=10)
     if DEBUG_MODE:
         print(session.options)
-        print(response)
+        print(response.json())
     if hasattr(response, 'from_cache') and response.from_cache:
         print(f"  Using cache ({url})")
     else:
@@ -282,7 +310,7 @@ def main() -> None:
         cache_name=str(CACHE_DIR / 'inat_api_cache'),
         backend='sqlite',  # Uses SQLite for storage
     )
-    
+
     if CLEAR_CACHE:
         session.cache.clear()
     else:
@@ -301,9 +329,6 @@ def main() -> None:
         print(f"Could not find place ID for {place_name}")
         return
 
-    # Get annotation IDs for "Fruits or Seeds"
-    # print("\nSetting up annotation filter for 'Fruits or Seeds'")
-    # annotation_ids = get_annotation_values()
 
     # Fetch all observations (without annotation filtering)
     print("\nFetching all observations...")
@@ -316,7 +341,7 @@ def main() -> None:
         # Analyze annotations
         print("\nAnalyzing annotations...")
         annotation_analysis = analyze_annotations(observations)
-        
+
         # Generate filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         species_name_safe = re.sub(r'[^\w\s-]', '', species_name.lower())
@@ -343,7 +368,7 @@ def main() -> None:
         print("\nQuality grades:")
         for grade, count in quality_grades.items():
             print(f"  {grade}: {count}")
-            
+
         # Annotation breakdown
         print("\nAnnotation breakdown:")
         for term, values in annotation_analysis['annotation_breakdown'].items():
