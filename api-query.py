@@ -10,13 +10,18 @@ import json
 import time
 from datetime import datetime
 import csv
+from pathlib import Path
+import re
 
-import requests
+from requests_cache import CachedSession
 
 # API Configuration
 BASE_URL = "https://api.inaturalist.org/v1"
 PER_PAGE = 200  # Maximum allowed per page
 DEBUG_MODE = False
+CACHE_DIR = Path("./inat_cache")
+CACHE_DURATION = 86400  # 24 hours in seconds
+CLEAR_CACHE = False # Delete entire cache
 
 def get_place_id(place_name: str) -> (int | None):
     """
@@ -28,7 +33,6 @@ def get_place_id(place_name: str) -> (int | None):
         "per_page": 10
     }
 
-    # response = requests.get(url, params=params, timeout=10)
     response = api_get_request(url, params)
     if DEBUG_MODE:
         print(response.json())
@@ -55,7 +59,6 @@ def get_taxon_id(species_name: str) -> (int | None):
         "per_page": 10
     }
 
-    # response = requests.get(url, params=params, timeout=10)
     response = api_get_request(url, params)
     if response.status_code == 200:
         data = response.json()
@@ -110,8 +113,7 @@ def fetch_observations(
             params["term_value_id"] = annotation_value_id
 
         print(f"Fetching page {page}...")
-        # response = requests.get(f"{BASE_URL}/observations", params=params, timeout=10)
-        response = api_get_request(f"{BASE_URL}/observations", params)
+        response = api_get_request(f"{BASE_URL}/observations", params, 30)
 
         if response.status_code == 200:
             data = response.json()
@@ -242,12 +244,27 @@ def analyze_annotations(observations: Any) -> dict:
         'annotation_breakdown': annotation_stats
     }
 
-def api_get_request(url: str, params: object) -> Any:
+def api_get_request(url: str, params: object, custom_duration: int = -1) -> Any:
     """
     Handle iNat API GET requests
     """
-    response = requests.get(url, params=params, timeout=10)
-    time.sleep(1)  # Rate limiting - 1 request per second
+    session = CachedSession(
+        cache_name=str(CACHE_DIR / 'inat_api_cache'),
+        backend='sqlite',  # Uses SQLite for storage
+        expire_after=CACHE_DURATION if custom_duration < 0 else custom_duration,
+        allowable_codes=[200],  # Only cache successful responses
+        allowable_methods=['GET'],  # Only cache GET requests
+        match_headers=False,  # Don't match on headers
+        ignored_parameters=['_']  # Ignore cache-busting parameters
+    )     
+    response = session.get(url, params=params, timeout=10)
+    if DEBUG_MODE:
+        print(session.options)
+        print(response)
+    if hasattr(response, 'from_cache') and response.from_cache:
+        print(f"  Using cache ({url})")
+    else:
+        time.sleep(1)  # Rate limiting - 1 request per second
     return response
 
 def main() -> None:
@@ -260,6 +277,16 @@ def main() -> None:
     # Configuration
     species_name = "Amelanchier alnifolia"
     place_name = "Siskiyou County, CA"
+
+    session = CachedSession(
+        cache_name=str(CACHE_DIR / 'inat_api_cache'),
+        backend='sqlite',  # Uses SQLite for storage
+    )
+    
+    if CLEAR_CACHE:
+        session.cache.clear()
+    else:
+        session.cache.remove_expired_responses()
 
     # Get IDs
     print(f"\nSearching for species: {species_name}")
@@ -275,8 +302,8 @@ def main() -> None:
         return
 
     # Get annotation IDs for "Fruits or Seeds"
-    print("\nSetting up annotation filter for 'Fruits or Seeds'")
-    annotation_ids = get_annotation_values()
+    # print("\nSetting up annotation filter for 'Fruits or Seeds'")
+    # annotation_ids = get_annotation_values()
 
     # Fetch all observations (without annotation filtering)
     print("\nFetching all observations...")
@@ -292,8 +319,10 @@ def main() -> None:
         
         # Generate filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_filename = f"results/amelanchier_alnifolia_all_{timestamp}.csv"
-        json_filename = f"results/amelanchier_alnifolia_all_{timestamp}.json"
+        species_name_safe = re.sub(r'[^\w\s-]', '', species_name.lower())
+        species_name_safe = re.sub(r'[-\s]+', '-', species_name_safe).strip('-_')
+        csv_filename = f"results/{species_name_safe}_all_{timestamp}.csv"
+        json_filename = f"results/{species_name_safe}_all_{timestamp}.json"
 
         # Save data
         save_to_csv(observations, csv_filename)
