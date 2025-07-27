@@ -201,12 +201,12 @@ def analyze_annotations(observations: Any) -> dict:
     observations_with_annotations = []
 
     term_labels = {
-        "1": "Life Stage",
-        "9": "Sex",
-        "12": "Plant Phenology",
-        "17": "Alive or Dead",
-        "22": "Evidence of Presence",
-        "36": "Leaves"
+        1: "Life Stage",
+        9: "Sex",
+        12: "Plant Phenology",
+        17: "Alive or Dead",
+        22: "Evidence of Presence",
+        36: "Leaves"
     }
 
     # TODO: Double-check these, copied from
@@ -214,44 +214,44 @@ def analyze_annotations(observations: Any) -> dict:
     # This list has the same values:
     # https://github.com/pyinat/pyinaturalist/blob/36b23a688ccfade3a6f438f9ecb3ab770ec9351a/test/sample_data/get_controlled_terms.json#L45
     value_labels = {
-        "2": "Adult",
-        "3": "Teneral", 
-        "4": "Pupa", 
-        "5": "Nymph", 
-        "6": "Larva", 
-        "7": "Egg", 
-        "8": "Juvenile", 
-        "16": "Subimago",
+        2: "Adult",
+        3: "Teneral", 
+        4: "Pupa", 
+        5: "Nymph", 
+        6: "Larva", 
+        7: "Egg", 
+        8: "Juvenile", 
+        16: "Subimago",
 
-        "10": "Female",
-        "11": "Male",
-        # "20":"Cannot Be Determined",
+        10: "Female",
+        11: "Male",
+        # 20:"Cannot Be Determined",
 
-        "13": "Flowering",
-        "14": "Fruits or Seeds",
-        "15": "Flower Buds",
-        "21": "No Flowers or Fruits",
+        13: "Flowering",
+        14: "Fruits or Seeds",
+        15: "Flower Buds",
+        21: "No Flowers or Fruits",
 
-        "18": "Alive", 
-        "19": "Dead",
-        "20": "Cannot Be Determined",
+        18: "Alive", 
+        19: "Dead",
+        20: "Cannot Be Determined",
 
-        "23": "Feather", 
-        "24": "Organism", 
-        "25": "Scat", 
-        "26": "Track", 
-        "27": "Bone", 
-        "28": "Molt", 
-        "29": "Gall", 
-        "30": "Egg", 
-        "31": "Hair", 
-        "32": "Leafmine", 
-        "35": "Construction",
+        23: "Feather", 
+        24: "Organism", 
+        25: "Scat", 
+        26: "Track", 
+        27: "Bone", 
+        28: "Molt", 
+        29: "Gall", 
+        30: "Egg", 
+        31: "Hair", 
+        32: "Leafmine", 
+        35: "Construction",
 
-        "37": "Breaking Leaf Buds",
-        "38": "Green Leaves",
-        "39": "Colored Leaves",
-        "40": "No Live Leaves"
+        37: "Breaking Leaf Buds",
+        38: "Green Leaves",
+        39: "Colored Leaves",
+        40: "No Live Leaves"
     }
 
     for obs in observations:
@@ -263,8 +263,8 @@ def analyze_annotations(observations: Any) -> dict:
             controlled_term: int = annotation.get('controlled_attribute_id', {})
             controlled_value: int = annotation.get('controlled_value_id', {})
 
-            term_label = term_labels[str(controlled_term)]
-            value_label = value_labels[str(controlled_value)]
+            term_label = term_labels[controlled_term]
+            value_label = value_labels[controlled_value]
 
             if term_label not in annotation_stats:
                 annotation_stats[term_label] = {}
@@ -285,23 +285,39 @@ def get_location_data(observation: Any):
     """
     Get info about the observation's location
     """
-
-    print(f"uri: {observation['uri']}")
-    # Check geoprivacy to see if location is obscured:
-    print(f"geoprivacy: {observation['geoprivacy']}")
-    print(f"taxon_geoprivacy: {observation['taxon_geoprivacy']}")
-    # true/false tag set by user:
-    print(f"obscured: {observation['obscured']}")
-    # positional_accuracy, null if obscured
-    print(f"positional_accuracy: {observation['positional_accuracy']}")
-    # public_positional_accuracy, null or very high if obscured
-    print(f"public_positional_accuracy: {observation['public_positional_accuracy']}")
-    print(f"geojson: {observation['geojson']}")
-    print(f"{observation['geojson']['coordinates']}")
+    elevation_data = elevation_get_request(observation['geojson']['coordinates'][0],observation['geojson']['coordinates'][1])
+    if DEBUG_MODE:
+        print(f"uri: {observation['uri']}")
+        # Check geoprivacy to see if location is obscured:
+        print(f"geoprivacy: {observation['geoprivacy']}")
+        print(f"taxon_geoprivacy: {observation['taxon_geoprivacy']}")
+        # true/false tag set by user:
+        print(f"obscured: {observation['obscured']}")
+        # positional_accuracy, null if obscured
+        print(f"positional_accuracy: {observation['positional_accuracy']}")
+        # public_positional_accuracy, null or very high if obscured
+        print(f"public_positional_accuracy: {observation['public_positional_accuracy']}")
+        print(f"geojson: {observation['geojson']}")
+        print(f"{observation['geojson']['coordinates']}")
+        print(elevation_data)
+    accurate_location = True if observation['geoprivacy'] != 'obscured' and (observation['positional_accuracy'] is None or observation['positional_accuracy'] < 1000) else False
+    location_data = {
+        "id": observation['id'],
+        "uri": observation['uri'],
+        "taxon": observation['taxon']['name'],
+        "geoprivacy": observation['geoprivacy'],
+        "coordinates": observation['geojson']['coordinates'],
+        "positional_accuracy": observation['positional_accuracy'],
+        "observed_on_details": observation['observed_on_details'],
+        "quality_grade": observation['quality_grade'],
+        "elevation": elevation_data,
+        "accurate_location": accurate_location,
+    }
     # print(f"location_is_exact: {observation['location_is_exact']}")
-    
+
     # Find elevation - USGS (US locations only?)
     # https://epqs.nationalmap.gov/v1/json?x=-123.2228195295394&y=41.97714644545383&units=Feet&output=json
+    return location_data
 
 def api_get_request(url: str, params: object, custom_duration: int = -1) -> Any:
     """
@@ -326,7 +342,7 @@ def api_get_request(url: str, params: object, custom_duration: int = -1) -> Any:
         time.sleep(1)  # Rate limiting - 1 request per second
     return response
 
-def elevation_get_request(lat: float, long: float) -> Any:
+def elevation_get_request(lat: float, lng: float) -> Any:
     """
     Handle epqs.nationalmap.gov API GET requests
     """
@@ -339,7 +355,7 @@ def elevation_get_request(lat: float, long: float) -> Any:
         match_headers=False,  # Don't match on headers
         ignored_parameters=['_']  # Ignore cache-busting parameters
     )
-    response = session.get("https://epqs.nationalmap.gov/v1/json?x=-123.2228195295394&y=41.97714644545383&units=Feet&output=json", timeout=10)
+    response = session.get(f"https://epqs.nationalmap.gov/v1/json?x={lat}&y={lng}&units=Feet&output=json", timeout=10)
     if DEBUG_MODE:
         print(session.options)
         print(response.json())
@@ -347,7 +363,7 @@ def elevation_get_request(lat: float, long: float) -> Any:
     #     print(f"  Using cache ({url})")
     # else:
     #     time.sleep(1)  # Rate limiting - 1 request per second
-    return response
+    return response.json()['value']
 
 def main() -> None:
     """
@@ -357,7 +373,7 @@ def main() -> None:
     print("=" * 50)
 
     # Configuration
-    species_name = "Ganoderma"
+    species_name = "Amelanchier alnifolia"
     place_name = "Siskiyou County, CA"
 
     session = CachedSession(
@@ -393,6 +409,9 @@ def main() -> None:
     )
 
     if observations:
+        obs_rg_accurate = []
+        obs_other = []
+        
         # Analyze annotations
         print("\nAnalyzing annotations...")
         annotation_analysis = analyze_annotations(observations)
@@ -419,7 +438,11 @@ def main() -> None:
         for obs in observations:
             grade = obs.get('quality_grade', 'unknown')
             quality_grades[grade] = quality_grades.get(grade, 0) + 1
-            get_location_data(obs)
+            location_info = get_location_data(obs)
+            if location_info['quality_grade'] == 'research' and location_info['accurate_location']:
+                obs_rg_accurate.append(location_info)
+            else:
+                obs_other.append(location_info)
 
         print("\nQuality grades:")
         for grade, count in quality_grades.items():
@@ -433,6 +456,12 @@ def main() -> None:
                 print(f"    {value}: {count}")
         # for obs in annotation_analysis['observations_with_annotations']:
         #     get_location_data(obs)
+        print("\nAccurate locations:")
+        for obs in obs_rg_accurate:
+            print(obs)
+        print("\nOther locations:")
+        for obs in obs_other:
+            print(obs)
     else:
         print("\nNo observations found matching the criteria.")
 

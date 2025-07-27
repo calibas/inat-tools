@@ -10,6 +10,7 @@ This is a Python-based tool for querying the iNaturalist API to fetch observatio
 
 The script uses only Python standard library modules plus `requests`:
 - `requests` - for HTTP API calls
+- `requests_cache` - caching for API requests
 - `json` - for data serialization
 - `csv` - for CSV output
 - `time` - for rate limiting
@@ -32,9 +33,14 @@ The script will:
 The script follows a functional approach with these key components:
 
 - **API Lookup Functions**: `get_taxon_id()`, `get_place_id()` - resolve names to iNaturalist IDs
-- **Annotation Handling**: `get_annotation_values()` - returns hardcoded Plant Phenology annotation IDs for fruiting observations
-- **Data Fetching**: `fetch_observations()` - handles paginated API requests with rate limiting (1 req/sec)
-- **Data Processing**: `extract_observation_data()` - transforms raw API responses into structured data
+- **Annotation Handling**: `analyze_annotations()` - iterate through observations and record annotation stats
+- **Data Fetching**: 
+- - `fetch_observations()` - get observations from iNaturalist API
+- - `api_get_request()` - handle iNaturalist API requests
+- - `elevation_get_request()` - handle nationalmap.gov API requests
+- **Data Processing**: 
+- - `extract_observation_data()` - transforms raw API responses into structured data
+- - `get_location_data()` - Process location data for an observation
 - **Output Functions**: `save_to_csv()`, `save_to_json()` - export data in multiple formats
 
 ## Configuration
