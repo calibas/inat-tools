@@ -14,9 +14,11 @@ from pathlib import Path
 import re
 
 from requests_cache import CachedSession
+from labels import get_term_label, get_value_label
 
 # API Configuration
 BASE_URL = "https://api.inaturalist.org/v1"
+# BASE_URL_V2 = "https://api.inaturalist.org/v2"
 PER_PAGE = 200  # Maximum allowed per page
 DEBUG_MODE = False
 CACHE_DIR = Path("./inat_cache")
@@ -65,6 +67,29 @@ def get_taxon_id(species_name: str) -> (int | None):
                 print(f"Found taxon: {taxon['name']} (ID: {taxon['id']})")
                 return taxon['id']
     return None
+
+def fetch_place_info(place_id: int) -> None:
+    """
+    Fetch place information from iNaturalist API and print in dict format
+    """
+    url = f"{BASE_URL}/places/{place_id}"
+    params = {}
+
+    response = api_get_request(url, params)
+    if response.status_code == 200:
+        data = response.json()
+        if data.get('results') and len(data['results']) > 0:
+            result = data['results'][0]
+            place_id = result['id']
+            name = result['name']
+            bbox_area = result['bbox_area']
+            place_type = result['place_type']
+            
+            print(f'{place_id}: {{"name": "{name}", "bbox_area": {bbox_area}, "place_type": {place_type}}},')
+        else:
+            print(f"No results found for place ID {place_id}")
+    else:
+        print(f"Error fetching place info: {response.status_code}")
 
 
 def fetch_observations(
@@ -200,59 +225,6 @@ def analyze_annotations(observations: Any) -> dict:
     annotation_stats = {}
     observations_with_annotations = []
 
-    term_labels = {
-        1: "Life Stage",
-        9: "Sex",
-        12: "Plant Phenology",
-        17: "Alive or Dead",
-        22: "Evidence of Presence",
-        36: "Leaves"
-    }
-
-    # TODO: Double-check these, copied from
-    # https://forum.inaturalist.org/t/how-to-use-inaturalists-search-urls-wiki-part-2-of-2/18792
-    # This list has the same values:
-    # https://github.com/pyinat/pyinaturalist/blob/36b23a688ccfade3a6f438f9ecb3ab770ec9351a/test/sample_data/get_controlled_terms.json#L45
-    value_labels = {
-        2: "Adult",
-        3: "Teneral", 
-        4: "Pupa", 
-        5: "Nymph", 
-        6: "Larva", 
-        7: "Egg", 
-        8: "Juvenile", 
-        16: "Subimago",
-
-        10: "Female",
-        11: "Male",
-        # 20:"Cannot Be Determined",
-
-        13: "Flowering",
-        14: "Fruits or Seeds",
-        15: "Flower Buds",
-        21: "No Flowers or Fruits",
-
-        18: "Alive", 
-        19: "Dead",
-        20: "Cannot Be Determined",
-
-        23: "Feather", 
-        24: "Organism", 
-        25: "Scat", 
-        26: "Track", 
-        27: "Bone", 
-        28: "Molt", 
-        29: "Gall", 
-        30: "Egg", 
-        31: "Hair", 
-        32: "Leafmine", 
-        35: "Construction",
-
-        37: "Breaking Leaf Buds",
-        38: "Green Leaves",
-        39: "Colored Leaves",
-        40: "No Live Leaves"
-    }
 
     for obs in observations:
         annotations = obs.get('annotations', [])
@@ -263,8 +235,8 @@ def analyze_annotations(observations: Any) -> dict:
             controlled_term: int = annotation.get('controlled_attribute_id', {})
             controlled_value: int = annotation.get('controlled_value_id', {})
 
-            term_label = term_labels[controlled_term]
-            value_label = value_labels[controlled_value]
+            term_label = get_term_label(controlled_term)
+            value_label = get_value_label(controlled_value)
 
             if term_label not in annotation_stats:
                 annotation_stats[term_label] = {}
@@ -464,6 +436,8 @@ def main() -> None:
             print(obs)
     else:
         print("\nNo observations found matching the criteria.")
+    # for place_id in range(201,251):
+    #     fetch_place_info(place_id)
 
 if __name__ == "__main__":
     main()
