@@ -4,7 +4,7 @@ Label lookup functions for iNaturalist API data
 Contains dictionaries and lookup functions for term labels, value labels, and place labels
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 # iNaturalist annotation term labels
 term_labels = {
@@ -65,7 +65,7 @@ value_labels = {
 }
 
 # See fetch_place_info() function
-place_labels: dict[int, dict] = {
+places_info: dict[int, dict[str, Any]] = {
     1: {"name": "United States", "bbox_area": 6349.38211750929, "place_type": 12},
     2: {"name": "Massachusetts", "bbox_area": 6.202817939097, "place_type": 8},
     3: {"name": "Nebraska", "bbox_area": 26.2511947726, "place_type": 8},
@@ -317,15 +317,112 @@ place_labels: dict[int, dict] = {
     249: {"name": "Lincoln County, US, CO", "bbox_area": 0.946366237243, "place_type": 9},
     250: {"name": "Jefferson", "bbox_area": 0.27501683563, "place_type": 9},
     2757: {"name": "Siskiyou", "bbox_area": 2.31256057032, "place_type": 9},
+    3957: {"name": "Shasta-Trinity National Forest", "bbox_area": 4.3651932242383, "place_type": 100},
+    3963: {"name": "Klamath National Forest", "bbox_area": 2.30022241629911, "place_type": 100},
+    4496: {"name": "Rough River", "bbox_area": 0.0418506166404553, "place_type": 100},
+    4498: {"name": "Modoc National Forest", "bbox_area": 1.7388399635042, "place_type": 100},
+    4512: {"name": "Lava Beds National Monument", "bbox_area": 0.03769998651543714, "place_type": 100},
     6481: {"name": "Dunsmuir City Park", "bbox_area": 7.68452732075066e-06, "place_type": 100},
+    9853: {"name": "North America (inc. ocean)", "bbox_area": 43095.66238781693, "place_type": 29},
+    50422: {"name": "Maritime West North America", "bbox_area": 369.7488205455, "place_type": None},
+    53219: {"name": "Cascade Range", "bbox_area": 42.0150679426416, "place_type": 16},
+    59613: {"name": "Nearctic ecozone", "bbox_area": 11533.329095024432, "place_type": 25},
+    62068: {"name": "California Floristic Province", "bbox_area": 131.00045024360907, "place_type": 21},
+    62332: {"name": "Southwestern United States", "bbox_area": 493.8915659629617, "place_type": 21},
+    65360: {"name": "Western United States and Canada", "bbox_area": 1076.5653680193775, "place_type": None},
+    66741: {"name": "The Americas", "bbox_area": 19945.616303840103, "place_type": None},
+    67725: {"name": "Pacific Northwest Coast", "bbox_area": 819.4258962334023, "place_type": 25},
+    67759: {"name": "Ecoregion_West", "bbox_area": 79.98211747391217, "place_type": 21},
+    67760: {"name": "Ecoregion_West", "bbox_area": 229.90246832989342, "place_type": None},
+    91864: {"name": "Pacific Crest Trail region", "bbox_area": 123.38912190075763, "place_type": 21},
+    92151: {"name": "Coastal Western North America", "bbox_area": 22366.54001114332, "place_type": None},
+    92337: {"name": "Linanthus dichotomus range", "bbox_area": 214.2666311864858, "place_type": 0},
+    92665: {"name": "Pacific Northwest / Alaska", "bbox_area": 15023.812711826455, "place_type": 21},
+    96034: {"name": "California, US (Custom)", "bbox_area": 148.9732143078027, "place_type": None},
+    96057: {"name": "California Drought Area", "bbox_area": 65.87500282764101, "place_type": 21},
+    96683: {"name": "Clarkia Range", "bbox_area": 382.35241643036557, "place_type": 21},
+    96687: {"name": "California including Pelagic Waters", "bbox_area": 98.111377578704, "place_type": 19},
+    97394: {"name": "North America", "bbox_area": 28171.40875125, "place_type": 29},
+    112727: {"name": "siskiyou general area", "bbox_area": 1.1635210650774477, "place_type": 36},
+    117476: {"name": "Great Basin", "bbox_area": 112.17449738988266, "place_type": 21},
+    117795: {"name": "Illinois Valley Ranger District and Surroundings", "bbox_area": 0.8775408552533294, "place_type": 0},
+    117952: {"name": "Bigfoot Trail", "bbox_area": 2.8634571882670046, "place_type": 100},
+    119138: {"name": "Pacific Mediterranean Coast", "bbox_area": 141.7251592786289, "place_type": 21},
+    119925: {"name": "Western Oregon", "bbox_area": 15.628455717933594, "place_type": None},
+    121278: {"name": "northeastern california", "bbox_area": 3.4949712137666116, "place_type": None},
+    121323: {"name": "Klamath Mountains Geomorphic Province", "bbox_area": 6.823216183615742, "place_type": 16},
+    121473: {"name": "Mount Shasta, The Mountain", "bbox_area": 0.16084839713467733, "place_type": 16},
+    123427: {"name": "Lava Beds National Monument", "bbox_area": 0.0251217874599688, "place_type": 100},
+    123595: {"name": "Marble Mountain Wilderness", "bbox_area": 0.15508242749600368, "place_type": 100},
+    123596: {"name": "Siskiyou Wilderness", "bbox_area": 0.18675395820887292, "place_type": 100},
+    123608: {"name": "Red Buttes Wilderness", "bbox_area": 0.02824291170645684, "place_type": 100},
+    123609: {"name": "Russian Wilderness", "bbox_area": 0.011079422222677769, "place_type": 100},
+    123615: {"name": "Trinity Alps Wilderness", "bbox_area": 0.46859444310296916, "place_type": 100},
+    124153: {"name": "Southern Oregon/Rogue Valley", "bbox_area": 2.8894589332185063, "place_type": None},
+    125185: {"name": "WiB Campus 50MR", "bbox_area": 44.495894143769284, "place_type": 21},
+    128153: {"name": "Far North Coastal California and Coastal Inland Areas", "bbox_area": 2.2801555019155013, "place_type": 17},
+    128743: {"name": "Klamath-Siskiyou forests", "bbox_area": 11.98825278449895, "place_type": 16},
+    129008: {"name": "Central-Southern Cascades Forests", "bbox_area": 20.92266781365114, "place_type": 25},
+    129010: {"name": "Eastern Cascades forests", "bbox_area": 18.274872543351528, "place_type": 25},
+    134580: {"name": "Pacific Crest Trail Area", "bbox_area": 116.33585221113401, "place_type": 17},
+    134581: {"name": "Pacific Crest Trail Area", "bbox_area": 116.33585221113401, "place_type": 17},
+    136650: {"name": "Marble/Salmon Mountains-Trinity Alps (US EPA Level IV Ecoregion)", "bbox_area": 0.742741505656241, "place_type": 16},
+    136971: {"name": "California Cascades Eastside Conifer Forest (US EPA Level IV Ecoregion)", "bbox_area": 2.622434281199048, "place_type": 16},
+    136982: {"name": "High Southern Cascades Montane Forest (US EPA Level IV Ecoregion)", "bbox_area": 4.311429202499203, "place_type": 16},
+    142703: {"name": "Cascade-Klamath Basin EcoRegion IV", "bbox_area": 0.19914316435197182, "place_type": 21},
+    142707: {"name": "Klamath River Ridges EcoRegion IV", "bbox_area": 0.39762238840412184, "place_type": 16},
+    145270: {"name": "East Cascades - Modoc Plateau", "bbox_area": 20.55421613725043, "place_type": 21},
+    145604: {"name": "Western Klamath Low Elevation Forests", "bbox_area": 1.4148130883994463, "place_type": 21},
+    145628: {"name": "Low Southern Cascades Mixed Conifer Forest", "bbox_area": 7.580553522654278, "place_type": 21},
+    145714: {"name": "Modoc Lava Flows & Buttes", "bbox_area": 0.9219558698079621, "place_type": 21},
+    145912: {"name": "Klamath Subalpine", "bbox_area": 0.6191681277439385, "place_type": 21},
+    153881: {"name": "Inland Siskiyous", "bbox_area": 1.6545207966976, "place_type": 21},
+    154011: {"name": "Medicine Lake Volcano", "bbox_area": 0.41846160224210527, "place_type": 16},
+    154289: {"name": "Eastern Klamath Low Elevation Forests", "bbox_area": 2.424898609777942, "place_type": 21},
+    154299: {"name": "Rogue/Illinois/Scott Valleys", "bbox_area": 1.4144974033200755, "place_type": 21},
+    154351: {"name": "Scott Mountains", "bbox_area": 0.3856618425787098, "place_type": 21},
+    154421: {"name": "Border High-Siskiyous", "bbox_area": 0.2736978946214321, "place_type": 21},
+    154611: {"name": "Old Cascades", "bbox_area": 0.19914311459374134, "place_type": 21},
+    154866: {"name": "Western Klamath Montane Forests", "bbox_area": 0.6612515058725033, "place_type": 21},
+    155052: {"name": "Klamath Mountains / California High North Coast Range EPA Level III Ecoregion", "bbox_area": 11.999974997016, "place_type": 21},
+    155061: {"name": "Cascades EPA Level III Ecoregion", "bbox_area": 20.9316852108, "place_type": 21},
+    155063: {"name": "Eastern Cascades Slopes and Foothills EPA Level III Ecoregion", "bbox_area": 18.285495800376, "place_type": 21},
+    155064: {"name": "PCT California - Sec P", "bbox_area": 0.17594460687894525, "place_type": 21},
+    155066: {"name": "PCT California - Sec Q", "bbox_area": 0.1250250538382855, "place_type": 21},
+    155067: {"name": "PCT California - Sec R", "bbox_area": 0.1574592111448553, "place_type": 21},
+    155649: {"name": "Siskiyou Mountains", "bbox_area": 0.29592874761729276, "place_type": 16},
+    156220: {"name": "Medicine Lake Lava Flows", "bbox_area": 1.6685015586095449, "place_type": 16},
+    156529: {"name": "High Cascade", "bbox_area": 0.5858387318545744, "place_type": 21},
+    162718: {"name": "Central Siskiyou", "bbox_area": 0.50201714356488, "place_type": None},
+    165950: {"name": "July Complex Fire 2020", "bbox_area": 0.3007297820859753, "place_type": None},
+    165967: {"name": "Slater Fire 2020", "bbox_area": 0.18060087544322084, "place_type": None},
+    173108: {"name": "Applegate River Watershed", "bbox_area": 0.5409848643714987, "place_type": 21},
+    176948: {"name": "Whitebark_Pine_Existing_Range_CA_NV", "bbox_area": 45.044455122514, "place_type": 16},
+    176951: {"name": "Whitebark_Pine_Existing_Range_CA", "bbox_area": 28.06406447186165, "place_type": 16},
     177501: {"name": "Klamath Mountains Youth Stewardship", "bbox_area": 6.823216183615742, "place_type": None},
+    179159: {"name": "Antelope Fire 2021", "bbox_area": 0.2268434609432916, "place_type": None},
+    179165: {"name": "McCash Fire 2021", "bbox_area": 0.0927816454698575, "place_type": None},
+    179168: {"name": "River Complex Fire 2021", "bbox_area": 0.22603594696577758, "place_type": None},
+    185555: {"name": "Pacific Crest Trail Buffer 1 Mile Segment 04", "bbox_area": 3.196313445482587, "place_type": 100},
+    185557: {"name": "Pacific Crest Trail Buffer 1 Mile Segment 05", "bbox_area": 2.5727436863019415, "place_type": 100},
+    197406: {"name": "Walker JJJ Ranch, CA, USA", "bbox_area": 0.004183568332503254, "place_type": None},
+    200046: {"name": "Quercus sadleriana Range", "bbox_area": 4.186117944923481, "place_type": 21},
+    203162: {"name": "SMLH Draft Boundary", "bbox_area": 0.15302837631308536, "place_type": None},
+    204864: {"name": "Rogue River–Siskiyou National Forest - Siskiyou Mountains Ranger District", "bbox_area": 0.1915989031563156, "place_type": 100},
+    214275: {"name": "Sagebrush Steppe region of NE California and NW Nevada", "bbox_area": 13.165993692007874, "place_type": 21},
 }
 
 place_type_labels = {
     8: "State",
     9: "County",
     12: "Country",
-    100: "Park", # TODO: Confirm
+    16: "Area", # TODO: Confirm
+    17: "Area", # TODO: Confirm
+    21: "Area", # TODO: Confirm
+    25: "Ecozone", # TODO: Confirm
+    29: "Continent",
+    36: "Area", # TODO: Confirm
+    100: "Park/Forest", # TODO: Confirm
     1001: "Parish", # Counties in Louisiana
 }
 
@@ -356,14 +453,19 @@ def get_value_label(value_id: int) -> Optional[str]:
     return value_labels.get(value_id)
 
 
-def get_place_label(place_id: int) -> Optional[dict[int,dict]]:
+def get_place_info(place_id: int) -> Optional[dict[str,Any]]:
     """
-    Get the label for a given place ID
+    Get info for a given place ID
     
     Args:
         place_id: The place ID
         
     Returns:
-        The place label or None if not found
+        The place dict or None if not found
     """
-    return place_labels.get(place_id)
+    place_info = places_info.get(place_id)
+    if place_info:
+        return place_info
+    else:
+        print(f"Missing place_id label ({place_id})")
+        return {"name": f"Not found ({place_id})", "bbox_area": 0, "place_type": None}

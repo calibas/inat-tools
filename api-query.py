@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 iNaturalist API Query Script
-Fetches observations for Amelanchier alnifolia with "Fruits or Seeds" annotation
-in Siskiyou County, California
+Fetches observations for given species in Siskiyou County, California
 """
 
 from typing import Any
@@ -14,7 +13,10 @@ from pathlib import Path
 import re
 
 from requests_cache import CachedSession
-from labels import get_term_label, get_value_label
+from labels import get_term_label, get_value_label, get_place_info
+
+SPECIES_NAME = "Amelanchier alnifolia"
+PLACE_NAME = "Siskiyou County, CA"
 
 # API Configuration
 BASE_URL = "https://api.inaturalist.org/v1"
@@ -271,8 +273,31 @@ def get_location_data(observation: Any):
         print(f"public_positional_accuracy: {observation['public_positional_accuracy']}")
         print(f"geojson: {observation['geojson']}")
         print(f"{observation['geojson']['coordinates']}")
+        print(f"geojson: {observation['place_ids']}")
         print(elevation_data)
     accurate_location = True if observation['geoprivacy'] != 'obscured' and (observation['positional_accuracy'] is None or observation['positional_accuracy'] < 1000) else False
+    places_info = []
+    country = ""
+    state = ""
+    county = ""
+    status = ""
+    annotations = observation.get('annotations', [])
+    for annotation in annotations:
+        controlled_term: int = annotation.get('controlled_attribute_id', {})
+        controlled_value: int = annotation.get('controlled_value_id', {})
+        if controlled_term == 12:
+            status = get_value_label(controlled_value)
+    for place_id in observation['place_ids']:
+        place_info = get_place_info(place_id)
+        if place_info:
+            places_info.append(place_info)
+            if place_info['place_type'] == 12:
+                country = place_info['name']
+            if place_info['place_type'] == 8:
+                state =  place_info['name']
+            if place_info['place_type'] in [9, 1001]:
+                county = place_info['name']
+    places_info = sorted(places_info, key=lambda x: x["bbox_area"])
     location_data = {
         "id": observation['id'],
         "uri": observation['uri'],
@@ -284,6 +309,12 @@ def get_location_data(observation: Any):
         "quality_grade": observation['quality_grade'],
         "elevation": elevation_data,
         "accurate_location": accurate_location,
+        "status": status,
+        "country": country,
+        "state": state,
+        "county": county,
+        "places_info": places_info,
+        "place_ids": observation['place_ids'],
     }
     # print(f"location_is_exact: {observation['location_is_exact']}")
 
@@ -337,6 +368,30 @@ def elevation_get_request(lat: float, lng: float) -> Any:
     #     time.sleep(1)  # Rate limiting - 1 request per second
     return response.json()['value']
 
+def print_observation(obs: Any) -> None:
+    """
+    Print out observation info
+    """
+    taxon_text = obs['taxon']
+    if len(taxon_text) > 29:
+        taxon_text = taxon_text[:29] + "..."
+    taxon = f"{taxon_text:<32}"
+    month = str(obs['observed_on_details']['month']) if obs['observed_on_details'] else ''
+    day = str(obs['observed_on_details']['day']) if obs['observed_on_details'] else ''
+    if month:
+        date = f"{(month + '-' + day):<5}"
+    else:
+        date = f"{'none':<5}"
+    elevation = f"{int(obs['elevation']):>6}"
+    status = f"{obs['status']:<18}"
+    place_text = obs['places_info'][0]['name'] if obs['places_info'][0] else ''
+    if len(place_text) > 27:
+        place_text = place_text[:27] + "..."
+    place = f"{place_text:<30}"
+    uri = obs['uri']
+
+    print(f"{taxon} {date} {elevation}  {status} {place} {uri}")
+
 def main() -> None:
     """
     Main function to execute the query
@@ -345,8 +400,8 @@ def main() -> None:
     print("=" * 50)
 
     # Configuration
-    species_name = "Amelanchier alnifolia"
-    place_name = "Siskiyou County, CA"
+    species_name = SPECIES_NAME
+    place_name = PLACE_NAME
 
     session = CachedSession(
         cache_name=str(CACHE_DIR / 'inat_api_cache'),
@@ -384,6 +439,8 @@ def main() -> None:
         obs_rg_accurate = []
         obs_other = []
         
+        all_place_ids = []
+        
         # Analyze annotations
         print("\nAnalyzing annotations...")
         annotation_analysis = analyze_annotations(observations)
@@ -411,11 +468,16 @@ def main() -> None:
             grade = obs.get('quality_grade', 'unknown')
             quality_grades[grade] = quality_grades.get(grade, 0) + 1
             location_info = get_location_data(obs)
+            all_place_ids = list(set(all_place_ids) | set(location_info['place_ids']))
             if location_info['quality_grade'] == 'research' and location_info['accurate_location']:
                 obs_rg_accurate.append(location_info)
             else:
                 obs_other.append(location_info)
 
+        obs_rg_accurate.sort(key=lambda x: x['observed_on_details']['day'] if x['observed_on_details'] else 99)
+        obs_rg_accurate.sort(key=lambda x: x['observed_on_details']['month'] if x['observed_on_details'] else 99)
+        obs_other.sort(key=lambda x: x['observed_on_details']['day'] if x['observed_on_details'] else 99)
+        obs_other.sort(key=lambda x: x['observed_on_details']['month'] if x['observed_on_details'] else 99)
         print("\nQuality grades:")
         for grade, count in quality_grades.items():
             print(f"  {grade}: {count}")
@@ -428,16 +490,30 @@ def main() -> None:
                 print(f"    {value}: {count}")
         # for obs in annotation_analysis['observations_with_annotations']:
         #     get_location_data(obs)
-        print("\nAccurate locations:")
+        print("\nAccurate locations & Research Grade:")
         for obs in obs_rg_accurate:
-            print(obs)
-        print("\nOther locations:")
+            print_observation(obs)
+            # taxon = f"{obs['taxon']:<30}"
+            # date = f"{obs['observed_on_details']['month']:>2}-{obs['observed_on_details']['day']:>2}"
+            # elevation = f"{int(obs['elevation']):>6}"
+            # status = f"{obs['status']:<15}"
+            # place = f"{obs['places_info'][0]['name'] if obs['places_info'][0] else '':<25}"
+            # uri = obs['uri']
+
+            # print(f"{taxon} {date} {elevation} {status} {place} {uri}")
+            # print(f"{obs['taxon']} {obs['observed_on_details']['month']}-{obs['observed_on_details']['day']} {int(obs['elevation'])} {obs['status']} {obs['places_info'][0]['name'] if obs['places_info'][0] else ''} {obs['uri']}")
+        print("\nOther observations:")
         for obs in obs_other:
-            print(obs)
+            print_observation(obs)
+            # print(f"{obs['taxon']} {obs['observed_on_details']['month']}-{obs['observed_on_details']['day']} {int(obs['elevation'])} {obs['status']} {obs['places_info'][0]['name'] if obs['places_info'][0] else ''} {obs['uri']}")
     else:
         print("\nNo observations found matching the criteria.")
-    # for place_id in range(201,251):
+        
+    # for place_id in [179168,203162]:
     #     fetch_place_info(place_id)
+    
+    # all_place_ids.sort()
+    # print(all_place_ids)
 
 if __name__ == "__main__":
     main()
