@@ -86,7 +86,7 @@ def fetch_place_info(place_id: int) -> None:
             name = result['name']
             bbox_area = result['bbox_area']
             place_type = result['place_type']
-            
+
             print(f'{place_id}: {{"name": "{name}", "bbox_area": {bbox_area}, "place_type": {place_type}}},')
         else:
             print(f"No results found for place ID {place_id}")
@@ -259,7 +259,7 @@ def get_location_data(observation: Any):
     """
     Get info about the observation's location
     """
-    elevation_data = elevation_get_request(observation['geojson']['coordinates'][0],observation['geojson']['coordinates'][1])
+    elevation_data = elevation_get_request_macrostrat(observation['geojson']['coordinates'][1],observation['geojson']['coordinates'][0])
     if DEBUG_MODE:
         print(f"uri: {observation['uri']}")
         # Check geoprivacy to see if location is obscured:
@@ -349,6 +349,11 @@ def elevation_get_request(lat: float, lng: float) -> Any:
     """
     Handle epqs.nationalmap.gov API GET requests
     """
+    # TODO: This endpoint doesn't seem to be reliable?
+    # 200: Call failed.  [Failed cloud operation: Open, Path: /vsimem/_000006A3.aux.xml]
+    # 200: Invalid or missing input parameters.
+    # Looks like there's also sections missing 41.2969568241, -122.3092979536 gives the error:
+    # 200: The operation was attempted on an empty geometry.
     session = CachedSession(
         cache_name=str(CACHE_DIR / 'elevation_api_cache'),
         backend='sqlite',  # Uses SQLite for storage
@@ -358,15 +363,57 @@ def elevation_get_request(lat: float, lng: float) -> Any:
         match_headers=False,  # Don't match on headers
         ignored_parameters=['_']  # Ignore cache-busting parameters
     )
-    response = session.get(f"https://epqs.nationalmap.gov/v1/json?x={lat}&y={lng}&units=Feet&output=json", timeout=10)
+    response = session.get(f"https://epqs.nationalmap.gov/v1/json?x={lng}&y={lat}&units=Feet&output=json", timeout=10)
     if DEBUG_MODE:
         print(session.options)
         print(response.json())
-    # if hasattr(response, 'from_cache') and response.from_cache:
-    #     print(f"  Using cache ({url})")
-    # else:
-    #     time.sleep(1)  # Rate limiting - 1 request per second
-    return response.json()['value']
+    if response.status_code == 200 and response.content:
+        try:
+            data = response.json()
+            return data['value']
+        except ValueError:
+            print("Response received but contains invalid JSON")
+            print(f"Raw response: {response.text}")
+            return "Error"
+    else:
+        print("Invalid API reponse")
+        return "Error"
+
+def elevation_get_request_macrostrat(lat: float, lng: float) -> Any:
+    """
+    Handle epqs.nationalmap.gov API GET requests
+    """
+    # TODO: Decide which elevation endpoint.
+    # This one is reliable so far, no holes found yet
+    # Also contains geologic and other information about location
+    # API may be slower
+    # A different of ~ 100 feet compared to nationalmap.gov, more accurate?
+    session = CachedSession(
+        cache_name=str(CACHE_DIR / 'elevation_api_cache_macrostrat'),
+        backend='sqlite',  # Uses SQLite for storage
+        expire_after=CACHE_DURATION,
+        allowable_codes=[200],  # Only cache successful responses
+        allowable_methods=['GET'],  # Only cache GET requests
+        match_headers=False,  # Don't match on headers
+        ignored_parameters=['_']  # Ignore cache-busting parameters
+    )
+    response = session.get(f"https://macrostrat.org/api/v2/mobile/map_query_v2?lng={lng}&lat={lat}&z=7", timeout=10)
+    if DEBUG_MODE:
+        print(session.options)
+        print(response.json())
+        print(f"https://macrostrat.org/api/v2/mobile/map_query_v2?lng={lng}&lat={lat}&z=7")
+    if response.status_code == 200 and response.content:
+        try:
+            data = response.json()
+            # Convert response to int, convert to feet, round, then convert back to string
+            return str(int(int(data['success']['data']['elevation']) * 3.28084))
+        except ValueError:
+            print("Response received but contains invalid JSON")
+            print(f"Raw response: {response.text}")
+            return "Error"
+    else:
+        print("Invalid API reponse")
+        return "Error"
 
 def print_observation(obs: Any) -> None:
     """
@@ -382,15 +429,22 @@ def print_observation(obs: Any) -> None:
         date = f"{(month + '-' + day):<5}"
     else:
         date = f"{'none':<5}"
-    elevation = f"{int(obs['elevation']):>6}"
-    status = f"{obs['status']:<18}"
+    try:
+        elevation = f"{int(obs['elevation']):>6}"
+    except (ValueError, TypeError):
+        if obs['elevation']:
+            elevation = f"{obs['elevation']:>6}"
+        else:
+            elevation = f"{'????':>6}"
+    status = f"{obs['status']:<21}"
     place_text = obs['places_info'][0]['name'] if obs['places_info'][0] else ''
     if len(place_text) > 27:
         place_text = place_text[:27] + "..."
     place = f"{place_text:<30}"
     uri = obs['uri']
+    obscured = "(obscured)" if obs['geoprivacy'] else ''
 
-    print(f"{taxon} {date} {elevation}  {status} {place} {uri}")
+    print(f"{taxon} {date} {elevation}  {status} {place} {uri} {obscured}")
 
 def main() -> None:
     """
@@ -508,10 +562,10 @@ def main() -> None:
             # print(f"{obs['taxon']} {obs['observed_on_details']['month']}-{obs['observed_on_details']['day']} {int(obs['elevation'])} {obs['status']} {obs['places_info'][0]['name'] if obs['places_info'][0] else ''} {obs['uri']}")
     else:
         print("\nNo observations found matching the criteria.")
-        
+
     # for place_id in [179168,203162]:
     #     fetch_place_info(place_id)
-    
+
     # all_place_ids.sort()
     # print(all_place_ids)
 
