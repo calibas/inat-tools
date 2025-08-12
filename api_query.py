@@ -47,7 +47,7 @@ def get_place_id(place_name: str) -> (int | None):
             if place_name.lower() in place['display_name'].lower():
                 print(f"Found place: {place['display_name']} (ID: {place['id']})")
                 return place['id']
-        if data['results'][0]:
+        if data['results'] and len(data['results']) > 0:
             return data['results'][0]['id']
     return None
 
@@ -268,7 +268,9 @@ def get_location_data(observation: Any):
     """
     Get info about the observation's location
     """
-    elevation_data = elevation_get_request_macrostrat(observation['geojson']['coordinates'][1],observation['geojson']['coordinates'][0])
+    elevation_data: int | None = None
+    if observation['geojson'] and observation['geojson']['coordinates'] and len(observation['geojson']['coordinates']) >= 2:
+        elevation_data = elevation_get_request_macrostrat(observation['geojson']['coordinates'][1],observation['geojson']['coordinates'][0])
     if DEBUG_MODE:
         print(f"uri: {observation['uri']}")
         # Check geoprivacy to see if location is obscured:
@@ -385,7 +387,7 @@ def elevation_get_request(lat: float, lng: float) -> Any:
             print(f"Raw response: {response.text}")
             return "Error"
     else:
-        print("Invalid API reponse")
+        print("Invalid API response")
         return "Error"
 
 def elevation_get_request_macrostrat(lat: float, lng: float) -> Any:
@@ -421,7 +423,7 @@ def elevation_get_request_macrostrat(lat: float, lng: float) -> Any:
             print(f"Raw response: {response.text}")
             return "Error"
     else:
-        print("Invalid API reponse")
+        print("Invalid API response")
         return "Error"
 
 def print_observation(obs: Any) -> None:
@@ -454,6 +456,93 @@ def print_observation(obs: Any) -> None:
     obscured = "(obscured)" if obs['geoprivacy'] else ''
 
     print(f"{taxon} {date} {elevation}  {status} {place} {uri} {obscured}")
+
+def process_observations(observations: list[Any], species_name: str) -> None:
+    obs_rg_accurate = []
+    obs_other = []
+    
+    all_place_ids = set()
+    places_missing_info = set()
+    
+    # Analyze annotations
+    print("\nAnalyzing annotations...")
+    annotation_analysis = analyze_annotations(observations)
+
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    species_name_safe = re.sub(r'[^\w\s-]', '', species_name.lower())
+    species_name_safe = re.sub(r'[-\s]+', '-', species_name_safe).strip('-_')
+    csv_filename = f"results/{species_name_safe}_all_{timestamp}.csv"
+    json_filename = f"results/{species_name_safe}_all_{timestamp}.json"
+
+    # Save data
+    save_to_csv(observations, csv_filename)
+    save_to_json(observations, json_filename)
+
+    # Print summary
+    print("\nSummary:")
+    print(f"Total observations retrieved: {len(observations)}")
+    print(f"Observations with annotations: {len(annotation_analysis['observations_with_annotations'])} ({annotation_analysis['annotation_percentage']:.1f}%)")
+    print(f"Date range: {observations[-1].get('observed_on')} to {observations[0].get('observed_on')}")
+
+    # Quality grade breakdown
+    quality_grades = {}
+    for obs in observations:
+        grade = obs.get('quality_grade', 'unknown')
+        quality_grades[grade] = quality_grades.get(grade, 0) + 1
+        location_info = get_location_data(obs)
+        # all_place_ids = list(set(all_place_ids) | set(location_info['place_ids']))
+        all_place_ids |= set(location_info['place_ids'])
+        if location_info['quality_grade'] == 'research' and location_info['accurate_location']:
+            obs_rg_accurate.append(location_info)
+        else:
+            obs_other.append(location_info)
+
+    # obs_rg_accurate.sort(key=lambda x: x['observed_on_details']['day'] if x['observed_on_details'] else 99)
+    # obs_rg_accurate.sort(key=lambda x: x['observed_on_details']['month'] if x['observed_on_details'] else 99)
+    # obs_other.sort(key=lambda x: x['observed_on_details']['day'] if x['observed_on_details'] else 99)
+    # obs_other.sort(key=lambda x: x['observed_on_details']['month'] if x['observed_on_details'] else 99)
+    obs_rg_accurate.sort(key=lambda x: (
+        x['observed_on_details']['month'] if x['observed_on_details'] else 99,      
+        x['observed_on_details']['day'] if x['observed_on_details'] else 99
+    ))
+    obs_other.sort(key=lambda x: (
+        x['observed_on_details']['month'] if x['observed_on_details'] else 99,
+        x['observed_on_details']['day'] if x['observed_on_details'] else 99
+    ))
+    print("\nQuality grades:")
+    for grade, count in quality_grades.items():
+        print(f"  {grade}: {count}")
+
+    # Annotation breakdown
+    print("\nAnnotation breakdown:")
+    for term, values in annotation_analysis['annotation_breakdown'].items():
+        print(f"  {term}:")
+        for value, count in values.items():
+            print(f"    {value}: {count}")
+    # for obs in annotation_analysis['observations_with_annotations']:
+    #     get_location_data(obs)
+    print("\nAccurate locations & Research Grade:")
+    for obs in obs_rg_accurate:
+        print_observation(obs)
+        # taxon = f"{obs['taxon']:<30}"
+        # date = f"{obs['observed_on_details']['month']:>2}-{obs['observed_on_details']['day']:>2}"
+        # elevation = f"{int(obs['elevation']):>6}"
+        # status = f"{obs['status']:<15}"
+        # place = f"{obs['places_info'][0]['name'] if obs['places_info'][0] else '':<25}"
+        # uri = obs['uri']
+
+        # print(f"{taxon} {date} {elevation} {status} {place} {uri}")
+        # print(f"{obs['taxon']} {obs['observed_on_details']['month']}-{obs['observed_on_details']['day']} {int(obs['elevation'])} {obs['status']} {obs['places_info'][0]['name'] if obs['places_info'][0] else ''} {obs['uri']}")
+    print("\nOther observations:")
+    for obs in obs_other:
+        print_observation(obs)
+        # print(f"{obs['taxon']} {obs['observed_on_details']['month']}-{obs['observed_on_details']['day']} {int(obs['elevation'])} {obs['status']} {obs['places_info'][0]['name'] if obs['places_info'][0] else ''} {obs['uri']}")
+    # all_place_ids.sort()
+    for place_id in sorted([pid for pid in all_place_ids if pid is not None]):
+        if get_place_info(place_id)["name"].startswith("Not found") and place_id not in places_missing_info:
+            fetch_place_info(place_id)
+            places_missing_info.add(place_id)
 
 def main() -> None:
     """
@@ -496,87 +585,15 @@ def main() -> None:
     observations = fetch_observations(
         taxon_id=taxon_id,
         place_id=place_id,
-        coordinates=[41.73613304818642,-121.10813961208953,40.32734850734382,-123.20652828396453]
+        # Normal box I use, includes some of Trinity and Lassen.
+        # coordinates=[41.73613304818642,-121.10813961208953,40.32734850734382,-123.20652828396453]
+        # More local:
+        coordinates=[41.5949692438279,-121.86482296169889,41.00276741343539,-122.57481441677702]
     )
 
     if observations:
-        obs_rg_accurate = []
-        obs_other = []
-        
-        all_place_ids = set()
-        places_missing_info = set()
-        
-        # Analyze annotations
-        print("\nAnalyzing annotations...")
-        annotation_analysis = analyze_annotations(observations)
+        process_observations(observations, species_name)
 
-        # Generate filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        species_name_safe = re.sub(r'[^\w\s-]', '', species_name.lower())
-        species_name_safe = re.sub(r'[-\s]+', '-', species_name_safe).strip('-_')
-        csv_filename = f"results/{species_name_safe}_all_{timestamp}.csv"
-        json_filename = f"results/{species_name_safe}_all_{timestamp}.json"
-
-        # Save data
-        save_to_csv(observations, csv_filename)
-        save_to_json(observations, json_filename)
-
-        # Print summary
-        print("\nSummary:")
-        print(f"Total observations retrieved: {len(observations)}")
-        print(f"Observations with annotations: {len(annotation_analysis['observations_with_annotations'])} ({annotation_analysis['annotation_percentage']:.1f}%)")
-        print(f"Date range: {observations[-1].get('observed_on')} to {observations[0].get('observed_on')}")
-
-        # Quality grade breakdown
-        quality_grades = {}
-        for obs in observations:
-            grade = obs.get('quality_grade', 'unknown')
-            quality_grades[grade] = quality_grades.get(grade, 0) + 1
-            location_info = get_location_data(obs)
-            # all_place_ids = list(set(all_place_ids) | set(location_info['place_ids']))
-            all_place_ids |= set(location_info['place_ids'])
-            if location_info['quality_grade'] == 'research' and location_info['accurate_location']:
-                obs_rg_accurate.append(location_info)
-            else:
-                obs_other.append(location_info)
-
-        obs_rg_accurate.sort(key=lambda x: x['observed_on_details']['day'] if x['observed_on_details'] else 99)
-        obs_rg_accurate.sort(key=lambda x: x['observed_on_details']['month'] if x['observed_on_details'] else 99)
-        obs_other.sort(key=lambda x: x['observed_on_details']['day'] if x['observed_on_details'] else 99)
-        obs_other.sort(key=lambda x: x['observed_on_details']['month'] if x['observed_on_details'] else 99)
-        print("\nQuality grades:")
-        for grade, count in quality_grades.items():
-            print(f"  {grade}: {count}")
-
-        # Annotation breakdown
-        print("\nAnnotation breakdown:")
-        for term, values in annotation_analysis['annotation_breakdown'].items():
-            print(f"  {term}:")
-            for value, count in values.items():
-                print(f"    {value}: {count}")
-        # for obs in annotation_analysis['observations_with_annotations']:
-        #     get_location_data(obs)
-        print("\nAccurate locations & Research Grade:")
-        for obs in obs_rg_accurate:
-            print_observation(obs)
-            # taxon = f"{obs['taxon']:<30}"
-            # date = f"{obs['observed_on_details']['month']:>2}-{obs['observed_on_details']['day']:>2}"
-            # elevation = f"{int(obs['elevation']):>6}"
-            # status = f"{obs['status']:<15}"
-            # place = f"{obs['places_info'][0]['name'] if obs['places_info'][0] else '':<25}"
-            # uri = obs['uri']
-
-            # print(f"{taxon} {date} {elevation} {status} {place} {uri}")
-            # print(f"{obs['taxon']} {obs['observed_on_details']['month']}-{obs['observed_on_details']['day']} {int(obs['elevation'])} {obs['status']} {obs['places_info'][0]['name'] if obs['places_info'][0] else ''} {obs['uri']}")
-        print("\nOther observations:")
-        for obs in obs_other:
-            print_observation(obs)
-            # print(f"{obs['taxon']} {obs['observed_on_details']['month']}-{obs['observed_on_details']['day']} {int(obs['elevation'])} {obs['status']} {obs['places_info'][0]['name'] if obs['places_info'][0] else ''} {obs['uri']}")
-        # all_place_ids.sort()
-        for place_id in sorted([pid for pid in all_place_ids if pid is not None]):
-            if get_place_info(place_id)["name"].startswith("Not found") and place_id not in places_missing_info:
-                fetch_place_info(place_id)
-                places_missing_info.add(place_id)
     else:
         print("\nNo observations found matching the criteria.")
 
