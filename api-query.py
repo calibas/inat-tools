@@ -97,8 +97,9 @@ def fetch_place_info(place_id: int) -> None:
 def fetch_observations(
     taxon_id: int,
     place_id: int,
-    annotation_term_id: (int | None) = None,
-    annotation_value_id: (int | None) = None):
+    annotation_term_id: int | None = None,
+    annotation_value_id: int | None = None,
+    coordinates: list[float] | None = None):
     """
     Fetch observations with specified parameters
     """
@@ -114,13 +115,21 @@ def fetch_observations(
             "page": page,
             "order_by": "observed_on",
             "order": "desc"
-        }
+        }   
 
         # Add annotation filters only if provided
         if annotation_term_id is not None:
             params["term_id"] = annotation_term_id
         if annotation_value_id is not None:
             params["term_value_id"] = annotation_value_id
+        
+        
+        if coordinates and len(coordinates) == 4:
+            params["place_id"] = "any"
+            params["nelat"] = coordinates[0]
+            params["nelng"] = coordinates[1]
+            params["swlat"] = coordinates[2]
+            params["swlng"] = coordinates[3]
 
         print(f"Fetching page {page}...")
         response = api_get_request(f"{BASE_URL}/observations", params, 300)
@@ -339,7 +348,7 @@ def api_get_request(url: str, params: object, custom_duration: int = -1) -> Any:
     if DEBUG_MODE:
         print(session.options)
         print(response.json())
-    if hasattr(response, 'from_cache') and response.from_cache:
+    if hasattr(response, 'from_cache') and response.from_cache and DEBUG_MODE:
         print(f"  Using cache ({url})")
     else:
         time.sleep(1)  # Rate limiting - 1 request per second
@@ -486,14 +495,16 @@ def main() -> None:
     print("\nFetching all observations...")
     observations = fetch_observations(
         taxon_id=taxon_id,
-        place_id=place_id
+        place_id=place_id,
+        coordinates=[41.73613304818642,-121.10813961208953,40.32734850734382,-123.20652828396453]
     )
 
     if observations:
         obs_rg_accurate = []
         obs_other = []
         
-        all_place_ids = []
+        all_place_ids = set()
+        places_missing_info = set()
         
         # Analyze annotations
         print("\nAnalyzing annotations...")
@@ -522,7 +533,8 @@ def main() -> None:
             grade = obs.get('quality_grade', 'unknown')
             quality_grades[grade] = quality_grades.get(grade, 0) + 1
             location_info = get_location_data(obs)
-            all_place_ids = list(set(all_place_ids) | set(location_info['place_ids']))
+            # all_place_ids = list(set(all_place_ids) | set(location_info['place_ids']))
+            all_place_ids |= set(location_info['place_ids'])
             if location_info['quality_grade'] == 'research' and location_info['accurate_location']:
                 obs_rg_accurate.append(location_info)
             else:
@@ -560,6 +572,11 @@ def main() -> None:
         for obs in obs_other:
             print_observation(obs)
             # print(f"{obs['taxon']} {obs['observed_on_details']['month']}-{obs['observed_on_details']['day']} {int(obs['elevation'])} {obs['status']} {obs['places_info'][0]['name'] if obs['places_info'][0] else ''} {obs['uri']}")
+        # all_place_ids.sort()
+        for place_id in sorted([pid for pid in all_place_ids if pid is not None]):
+            if get_place_info(place_id)["name"].startswith("Not found") and place_id not in places_missing_info:
+                fetch_place_info(place_id)
+                places_missing_info.add(place_id)
     else:
         print("\nNo observations found matching the criteria.")
 
